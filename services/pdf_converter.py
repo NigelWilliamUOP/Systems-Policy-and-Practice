@@ -1,10 +1,13 @@
 """PDF to HTML and Markdown converter service."""
+import logging
 import fitz  # PyMuPDF
 import re
 import os
 from pathlib import Path
 from typing import Tuple, List, Dict
 from collections import Counter
+
+logger = logging.getLogger(__name__)
 
 
 class PDFConverter:
@@ -61,7 +64,7 @@ class PDFConverter:
                         })
 
                     except Exception as e:
-                        print(f"Could not extract image {img_index} from page {page_num}: {e}")
+                        logger.debug("Could not extract image %d from page %d", img_index, page_num, exc_info=True)
                         continue
 
             doc.close()
@@ -69,7 +72,7 @@ class PDFConverter:
             return image_files
 
         except Exception as e:
-            print(f"Error extracting images from PDF: {e}")
+            logger.warning("Error extracting images from PDF", exc_info=True)
             return []
 
     def detect_table_regions(self, page) -> List[tuple]:
@@ -212,7 +215,7 @@ class PDFConverter:
                         print(f"Extracted table {table_count} from page {page_num + 1}")
 
                 except Exception as e:
-                    print(f"Error extracting tables from page {page_num}: {e}")
+                    logger.debug("Error extracting tables from page %d", page_num, exc_info=True)
                     continue
 
             doc.close()
@@ -220,7 +223,7 @@ class PDFConverter:
             return table_images
 
         except Exception as e:
-            print(f"Error extracting table images from PDF: {e}")
+            logger.warning("Error extracting table images from PDF", exc_info=True)
             return []
 
 
@@ -289,7 +292,7 @@ class PDFConverter:
             return header_patterns, footer_patterns
 
         except Exception as e:
-            print(f"Error detecting headers/footers: {e}")
+            logger.warning("Error detecting headers/footers", exc_info=True)
             return [], []
 
     def extract_content_with_positions(self, pdf_path: str, output_dir: str) -> List[Dict]:
@@ -395,7 +398,7 @@ class PDFConverter:
             return all_content
 
         except Exception as e:
-            print(f"Error extracting content with positions: {e}")
+            logger.warning("Error extracting content with positions", exc_info=True)
             return []
 
     def extract_text_from_pdf(self, pdf_path: str) -> str:
@@ -455,7 +458,7 @@ class PDFConverter:
             return full_text
 
         except Exception as e:
-            print(f"Error extracting text from PDF: {e}")
+            logger.warning("Error extracting text from PDF", exc_info=True)
             return ""
 
     def process_footnotes_to_endnotes(self, text: str) -> Tuple[str, List[str]]:
@@ -825,7 +828,7 @@ class PDFConverter:
             html_success = True
             print(f"✓ Generated HTML: {html_path}")
         except Exception as e:
-            print(f"✗ Failed to generate HTML: {e}")
+            logger.warning("Failed to generate HTML for %s", base_path, exc_info=True)
 
         try:
             # Generate Markdown
@@ -836,7 +839,7 @@ class PDFConverter:
             markdown_success = True
             print(f"✓ Generated Markdown: {markdown_path}")
         except Exception as e:
-            print(f"✗ Failed to generate Markdown: {e}")
+            logger.warning("Failed to generate Markdown for %s", base_path, exc_info=True)
 
         return html_success, markdown_success
 

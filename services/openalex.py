@@ -1,7 +1,10 @@
 """OpenAlex API integration for field classification."""
+import logging
 import httpx
 import config
 from typing import List, Dict, Any, Optional
+
+logger = logging.getLogger(__name__)
 
 class OpenAlexService:
     """Service for OpenAlex API integration."""
@@ -50,7 +53,7 @@ class OpenAlexService:
                 return topics[:10]  # Return top 10 suggestions
 
         except Exception as e:
-            print(f"Error fetching OpenAlex suggestions: {e}")
+            logger.error("Error fetching OpenAlex suggestions", exc_info=True)
             return []
 
     def _extract_topics(self, results: List[Dict]) -> List[Dict[str, Any]]:
@@ -114,7 +117,7 @@ class OpenAlexService:
                 }
 
         except Exception as e:
-            print(f"Error fetching topic hierarchy: {e}")
+            logger.error("Error fetching topic hierarchy for %s", topic_id, exc_info=True)
             return None
 
 # Create singleton instance

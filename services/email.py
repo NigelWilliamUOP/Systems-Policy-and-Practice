@@ -1,8 +1,11 @@
 """Email service for sending verification emails."""
+import logging
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import config
+
+logger = logging.getLogger(__name__)
 
 
 class EmailService:
@@ -128,7 +131,7 @@ https://jaigp.org
             return True
 
         except Exception as e:
-            print(f"ERROR: Failed to send verification email: {e}")
+            logger.error("Failed to send verification email to %s", to_email, exc_info=True)
             return False
 
     def _send_email(self, to_email: str, subject: str, text_content: str, html_content: str) -> bool:
@@ -143,8 +146,7 @@ https://jaigp.org
             msg.attach(MIMEText(html_content, 'html'))
 
             if not self.smtp_user or not self.smtp_password:
-                print(f"WARNING: SMTP credentials not configured. Email would be sent to: {to_email}")
-                print(f"Subject: {subject}")
+                logger.warning("SMTP credentials not configured. Email to %s skipped (subject: %s)", to_email, subject)
                 return True
 
             with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
@@ -156,7 +158,7 @@ https://jaigp.org
             return True
 
         except Exception as e:
-            print(f"ERROR: Failed to send email to {to_email}: {e}")
+            logger.error("Failed to send email to %s: %s", to_email, subject, exc_info=True)
             return False
 
     def _email_wrapper(self, body_html: str, body_text: str) -> str:

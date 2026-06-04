@@ -1,4 +1,5 @@
 """Main FastAPI application for JAIGP - Journal for AI Generated Papers."""
+import logging
 import os
 from fastapi import FastAPI, Request, Depends
 from fastapi.staticfiles import StaticFiles
@@ -6,6 +7,8 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
 import config
+
+logger = logging.getLogger(__name__)
 from models.database import init_db
 from middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
 from services.redis_session import RedisSessionMiddleware
@@ -55,7 +58,7 @@ class NotificationCountMiddleware(BaseHTTPMiddleware):
                             NotificationCountMiddleware._online_count_ts = now
                         request.state.online_count = NotificationCountMiddleware._online_count_cache
                 except Exception:
-                    pass
+                    logger.debug("Redis online-tracking unavailable", exc_info=True)
 
                 user = request.session.get("user") if hasattr(request, "session") else None
                 if user:
@@ -81,7 +84,7 @@ class NotificationCountMiddleware(BaseHTTPMiddleware):
                     finally:
                         db.close()
         except Exception:
-            pass
+            logger.warning("NotificationCountMiddleware error", exc_info=True)
         return await call_next(request)
 
 # Add security middlewares

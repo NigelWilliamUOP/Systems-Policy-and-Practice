@@ -1,4 +1,5 @@
 """Admin console routes."""
+import logging
 from fastapi import APIRouter, Request, Depends, HTTPException, Form, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, desc, distinct
@@ -8,6 +9,8 @@ import secrets
 from models.database import get_db
 from models.user import User
 from models.user_email import UserEmail
+
+logger = logging.getLogger(__name__)
 from models.paper import Paper, PaperHumanAuthor, STAGE_NAMES
 from models.editorial import EditorialBoardMember, EditorialDecision
 from models.review import HumanReview, AIReview
@@ -733,21 +736,21 @@ async def admin_delete_paper(
             file_path = file_storage.get_file_path(version.pdf_filename, paper.published_date)
             file_storage.delete_file(file_path)
         except Exception:
-            pass  # File may already be gone
+            logger.warning("Failed to delete PDF %s for paper %d", version.pdf_filename, paper_id, exc_info=True)
 
     if paper.image_filename:
         try:
             image_path = file_storage.get_file_path(paper.image_filename, paper.published_date)
             file_storage.delete_file(image_path)
         except Exception:
-            pass
+            logger.warning("Failed to delete image %s for paper %d", paper.image_filename, paper_id, exc_info=True)
 
     try:
         db.delete(paper)
         db.commit()
     except Exception as e:
         db.rollback()
-        print(f"ERROR: Admin failed to delete paper {paper_id}: {e}")
+        logger.error("Admin failed to delete paper %d", paper_id, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to delete paper.")
 
     return HTMLResponse(

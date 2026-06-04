@@ -1,4 +1,5 @@
 """Direct messaging routes."""
+import logging
 from fastapi import APIRouter, Request, Depends, HTTPException, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -11,6 +12,8 @@ from models.message import DirectMessage
 from models.discussion import UserFollow
 from services.notification import create_notification
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["messaging"])
 templates = Jinja2Templates(directory="templates")
@@ -173,7 +176,7 @@ async def send_message(
                 message_preview=content,
             )
         except Exception as e:
-            print(f"[messaging] Email notification failed: {e}")
+            logger.warning("Email notification failed for message to user %d", other_user_id, exc_info=True)
 
     # Return the rendered message fragment
     return templates.TemplateResponse("components/message_bubble.html", {

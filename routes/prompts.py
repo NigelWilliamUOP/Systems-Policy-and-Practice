@@ -1,5 +1,6 @@
 """Open Prompt routes — archive of building prompts and community suggestions."""
 import json
+import logging
 import os
 import glob
 from fastapi import APIRouter, Request, Depends, HTTPException, Form, Query
@@ -13,6 +14,8 @@ from models.prompt import CommunityPrompt, PromptComment, PromptCommentVote, Pro
 from models.user import User
 from datetime import datetime
 from services.notification import create_notification
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["prompts"])
 templates = Jinja2Templates(directory="templates")
@@ -431,7 +434,7 @@ async def prompts_page(
                     print(f"[archive-summary] DB persist failed: {e}")
                     db.rollback()
     except Exception:
-        pass  # gracefully degrade — page still renders without summary
+        logger.warning("Failed to load/generate archive summary", exc_info=True)
 
     # Archive tab: flat reverse-chronological list with pagination + search
     archive_prompts = []

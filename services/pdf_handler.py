@@ -1,9 +1,12 @@
 """PDF file processing and validation service."""
+import logging
 from fastapi import UploadFile, HTTPException
 from pypdf import PdfReader
 import io
 import config
 from typing import Dict, Any, Optional
+
+logger = logging.getLogger(__name__)
 
 # Maximum page height in points before we consider it oversized.
 # US Letter is 792pt tall; A4 is 842pt. Anything over 2000pt (about 28in)
@@ -145,7 +148,7 @@ class PDFHandler:
             return content
         except Exception as e:
             # Don't fail the upload if repagination fails — return original
-            print(f"WARNING: PDF repagination failed: {e}")
+            logger.warning("PDF repagination failed", exc_info=True)
             return content
 
     async def get_pdf_metadata(self, content: bytes) -> Dict[str, Any]:
@@ -170,7 +173,7 @@ class PDFHandler:
             return metadata
 
         except Exception as e:
-            print(f"Error extracting PDF metadata: {e}")
+            logger.warning("Error extracting PDF metadata", exc_info=True)
             return {"num_pages": 0, "metadata": {}}
 
     def get_extension_from_filename(self, filename: str) -> str:

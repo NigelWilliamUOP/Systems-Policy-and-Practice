@@ -1,4 +1,5 @@
 """Paper submission routes."""
+import logging
 from fastapi import APIRouter, BackgroundTasks, Request, Depends, HTTPException, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -20,6 +21,8 @@ from typing import List, Optional
 import json
 import secrets
 import config
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/submit", tags=["submit"])
 templates = Jinja2Templates(directory="templates")
@@ -82,13 +85,13 @@ async def fetch_openalex_fields(
             }
         )
     except Exception as e:
-        print(f"Error fetching OpenAlex suggestions: {e}")
+        logger.error("Error fetching OpenAlex suggestions", exc_info=True)
         return templates.TemplateResponse(
             "components/field_suggestions.html",
             {
                 "request": request,
                 "suggestions": [],
-                "error": f"Error: {str(e)}"
+                "error": "Could not fetch field suggestions. Please try again."
             }
         )
 
@@ -309,7 +312,8 @@ async def submit_paper(
 
     # Send verification email
     verification_url = f"{config.BASE_URL}/submit/verify/{verification_token}"
-    email_service.send_verification_email(submitter_email, verification_url, title)
+    if not email_service.send_verification_email(submitter_email, verification_url, title):
+        logger.error("Failed to send verification email to %s for paper %d", submitter_email, paper.id)
 
     # Redirect to verification pending page
     return RedirectResponse(url=f"/submit/verification-sent?email={submitter_email}", status_code=303)

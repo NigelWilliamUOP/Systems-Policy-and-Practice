@@ -1,4 +1,5 @@
 """Homepage and about page routes."""
+import logging
 from fastapi import APIRouter, Request, Depends, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -13,6 +14,8 @@ from services.cache import cache, cache_result
 import random
 import json
 from datetime import date
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -421,6 +424,7 @@ async def history_page(request: Request, db: Session = Depends(get_db)):
             archive = json.load(f)
             total_prompts = archive.get("total_prompts", 0)
     except Exception:
+        logger.warning("Could not load prompts archive for history page", exc_info=True)
         total_prompts = 0
 
     return templates.TemplateResponse("history.html", {

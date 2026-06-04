@@ -5,6 +5,7 @@ Flow: ensure R3 user -> upload PDF -> poll for results -> display comments.
 Authors upload revised manuscript + response letter PDF for synchronous re-scoring via /revise.
 Auto-advances to stage 4 when all revision scores >= 3. Desk rejects after 3 failed attempts.
 """
+import logging
 from fastapi import APIRouter, Request, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
@@ -14,6 +15,8 @@ from datetime import datetime
 from html import escape as html_escape
 import json
 from models.database import get_db
+
+logger = logging.getLogger(__name__)
 from models.paper import Paper, PaperVersion, PaperHumanAuthor
 from models.review import AIReview
 from models.user import User
@@ -475,7 +478,7 @@ async def ai_review_page(
             if r3_data.get("status") == "completed" and latest_review.status != "completed":
                 _complete_review(latest_review, r3_data, db)
         except Exception as e:
-            print(f"[Reviewer3] Error polling status: {e}")
+            logger.warning("Reviewer3 status poll error for paper %d", paper_id, exc_info=True)
 
     # Get author's email for Reviewer3 user creation
     # Try: user profile → paper submitter_email → session
@@ -614,7 +617,7 @@ async def submit_ai_review(
         )
 
     except Exception as e:
-        print(f"[Reviewer3] Submission error: {e}")
+        logger.error("Reviewer3 submission error for paper %d", paper_id, exc_info=True)
         from html import escape as html_escape
         return HTMLResponse(
             '<div class="bg-red-50 border border-red-200 rounded-lg p-4 text-center">'
@@ -678,7 +681,7 @@ async def ai_review_status(
                     '</div>'
                 )
         except Exception as e:
-            print(f"[Reviewer3] Status poll error: {e}")
+            logger.warning("Reviewer3 status poll error for paper %d", paper_id, exc_info=True)
 
     return HTMLResponse(
         '<div class="bg-amber-50 border border-amber-200 rounded-lg p-6"'
@@ -960,7 +963,7 @@ async def resubmit_ai_review(
                 for page in doc:
                     author_response_text += page.get_text()
         except Exception as e:
-            print(f"[Reviewer3] Warning: could not extract text from response PDF: {e}")
+            logger.warning("Could not extract text from response PDF for paper %d", paper_id, exc_info=True)
             author_response_text = "(author response text extraction failed)"
 
         # Call /revise synchronously against the original session ID
@@ -1031,7 +1034,7 @@ async def resubmit_ai_review(
         return HTMLResponse(_needs_revision_result_html(paper_id, evaluations, attempt_number, attempts_remaining))
 
     except Exception as e:
-        print(f"[Reviewer3] Resubmission error: {e}")
+        logger.error("Reviewer3 resubmission error for paper %d", paper_id, exc_info=True)
         # Return 200 so HTMX swaps the error into the DOM
         return HTMLResponse(
             '<div class="bg-red-50 border border-red-200 rounded-lg p-4 text-center">'

@@ -1,4 +1,5 @@
 """Authentication routes for ORCID OAuth."""
+import logging
 from fastapi import APIRouter, Request, Depends, HTTPException, Form
 from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -12,6 +13,8 @@ from models.user_email import UserEmail
 import config
 import json
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 templates = Jinja2Templates(directory="templates")
@@ -129,8 +132,7 @@ async def callback(
             user.orcid_works = badge_data["journal_articles"]
             user.badge_updated_at = datetime.utcnow()
         except Exception as e:
-            print(f"Error updating badge: {e}")
-            # Continue even if badge update fails
+            logger.warning("Error updating badge for %s during login", orcid_id, exc_info=True)
 
     db.commit()
     db.refresh(user)
@@ -660,7 +662,7 @@ async def delete_account_confirm(
                                 if img_path.exists():
                                     img_path.unlink()
                     except Exception as e:
-                        print(f"[delete-account] File cleanup error for paper {paper.id}: {e}")
+                        logger.warning("File cleanup error for paper %d during account deletion", paper.id, exc_info=True)
                     db.delete(paper)  # CASCADE removes versions, fields, categories, comments, votes, etc.
             else:
                 # Multiple authors — just remove this user's link
@@ -708,9 +710,7 @@ async def delete_account_confirm(
 
     except Exception as e:
         db.rollback()
-        print(f"ERROR: Failed to delete user {uid}: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error("Failed to delete user %d", uid, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to delete account. Please contact support.")
 
     # Clear session
@@ -772,7 +772,7 @@ async def refresh_badge(request: Request, db: Session = Depends(get_db)):
         })
 
     except Exception as e:
-        print(f"Error refreshing badge: {e}")
+        logger.error("Error refreshing badge", exc_info=True)
         return JSONResponse(
             {"error": "Failed to refresh badge data"},
             status_code=500

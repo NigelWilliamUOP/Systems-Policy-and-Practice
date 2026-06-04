@@ -1,5 +1,6 @@
 """Redis-backed session management for horizontal scaling."""
 import json
+import logging
 import secrets
 import time
 from typing import Optional, Dict, Any
@@ -8,6 +9,8 @@ from starlette.requests import Request
 from starlette.types import ASGIApp, Receive, Scope, Send, Message
 from services.cache import redis_client, check_redis_connection
 import config
+
+logger = logging.getLogger(__name__)
 
 
 class RedisSessionBackend:
@@ -27,7 +30,7 @@ class RedisSessionBackend:
                 return json.loads(data)
             return {}
         except Exception as e:
-            print(f"Session get error: {e}")
+            logger.warning("Session get error for %s", self.session_id[:8], exc_info=True)
             return {}
 
     def set(self, data: Dict[str, Any]) -> bool:
@@ -47,7 +50,7 @@ class RedisSessionBackend:
             )
             return True
         except Exception as e:
-            print(f"Session set error: {e}")
+            logger.warning("Session set error for %s", self.session_id[:8], exc_info=True)
             return False
 
     def delete(self) -> bool:
@@ -58,7 +61,7 @@ class RedisSessionBackend:
             redis_client.delete(self.key)
             return True
         except Exception as e:
-            print(f"Session delete error: {e}")
+            logger.warning("Session delete error for %s", self.session_id[:8], exc_info=True)
             return False
 
 

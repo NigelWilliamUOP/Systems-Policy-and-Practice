@@ -1,8 +1,11 @@
 """ORCID OAuth 2.0 integration service."""
+import logging
 import httpx
 import secrets
 import config
 from typing import Optional, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 class ORCIDService:
     """Service for handling ORCID OAuth authentication."""
@@ -54,10 +57,10 @@ class ORCIDService:
                 if response.status_code == 200:
                     return response.json()
                 else:
-                    print(f"Token exchange failed: {response.status_code} - {response.text}")
+                    logger.error("Token exchange failed: %d - %s", response.status_code, response.text)
                     return None
         except Exception as e:
-            print(f"Error exchanging code for token: {e}")
+            logger.error("Error exchanging code for token", exc_info=True)
             return None
 
     async def get_user_info(self, orcid_id: str, access_token: str) -> Optional[Dict[str, Any]]:
@@ -77,10 +80,10 @@ class ORCIDService:
                     data = response.json()
                     return self._parse_user_data(orcid_id, data)
                 else:
-                    print(f"Failed to fetch user info: {response.status_code}")
+                    logger.error("Failed to fetch user info for %s: %d", orcid_id, response.status_code)
                     return None
         except Exception as e:
-            print(f"Error fetching user info: {e}")
+            logger.error("Error fetching user info for %s", orcid_id, exc_info=True)
             return None
 
     def _parse_user_data(self, orcid_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -182,10 +185,10 @@ class ORCIDService:
                     print(f"ORCID {orcid_id}: Found {count} valid works")
                     return count
                 else:
-                    print(f"Failed to fetch works: {response.status_code}")
+                    logger.warning("Failed to fetch works for %s: %d", orcid_id, response.status_code)
                     return 0
         except Exception as e:
-            print(f"Error fetching works count: {e}")
+            logger.error("Error fetching works count for %s", orcid_id, exc_info=True)
             return 0
 
     def calculate_badge(self, works_count: int) -> str:
@@ -281,7 +284,7 @@ class ORCIDService:
                 return journal_articles[:limit]
 
         except Exception as e:
-            print(f"Error fetching journal articles: {e}")
+            logger.error("Error fetching journal articles for %s", orcid_id, exc_info=True)
             return []
 
     async def update_user_badge(self, orcid_id: str) -> dict:
