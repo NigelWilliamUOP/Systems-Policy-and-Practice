@@ -2,8 +2,6 @@
 import re
 from fastapi import APIRouter, Request, Depends, HTTPException, Form, Query
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from template_helpers import register_filters
 from sqlalchemy.orm import Session
 from models.database import get_db
 from models.discussion import DiscussionPost, DiscussionComment, DiscussionCommentVote, DiscussionVote, UserFollow
@@ -11,17 +9,13 @@ from models.prompt import CommunityPrompt
 from models.user import User
 from datetime import datetime
 from services.notification import create_notification
+from routes.shared import (
+    require_auth, get_templates, toggle_vote, delete_owned_entity,
+    build_preview_comments, load_user_votes,
+)
 
 router = APIRouter(tags=["discussion"])
-templates = Jinja2Templates(directory="templates")
-templates.env = register_filters(templates.env)
-
-
-def require_auth(request: Request):
-    user = request.session.get("user")
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    return user
+templates = get_templates()
 
 
 @router.post("/discussion/summarize", response_class=HTMLResponse)
@@ -64,27 +58,18 @@ async def discussion_page(
         .all()
     )
 
-    user_votes = {}
-    if user:
-        post_ids = [p.id for p in posts]
-        if post_ids:
-            votes = db.query(DiscussionVote).filter(
-                DiscussionVote.post_id.in_(post_ids),
-                DiscussionVote.user_id == user["id"],
-            ).all()
-            user_votes = {v.post_id: v.vote_type for v in votes}
+    user_votes = load_user_votes(
+        db=db, vote_model=DiscussionVote,
+        parent_id_field="post_id",
+        parent_ids=[p.id for p in posts],
+        user_id=user["id"],
+    ) if user else {}
 
     newest_id = posts[0].id if posts else 0
     oldest_id = posts[-1].id if posts else 0
     has_more = len(posts) == 20
 
-    # Compute preview comments (top comment per post)
-    preview_comments = {}
-    for post in posts:
-        if post.comments:
-            preview_comments[post.id] = max(
-                post.comments, key=lambda c: (c.net_votes, -c.created_at.timestamp())
-            )
+    preview_comments = build_preview_comments(posts)
 
     return templates.TemplateResponse(
         "discussion.html",
@@ -123,23 +108,14 @@ async def discussion_feed(
 
     posts = query.order_by(DiscussionPost.created_at.desc()).limit(20).all()
 
-    user_votes = {}
-    if user:
-        post_ids = [p.id for p in posts]
-        if post_ids:
-            votes = db.query(DiscussionVote).filter(
-                DiscussionVote.post_id.in_(post_ids),
-                DiscussionVote.user_id == user["id"],
-            ).all()
-            user_votes = {v.post_id: v.vote_type for v in votes}
+    user_votes = load_user_votes(
+        db=db, vote_model=DiscussionVote,
+        parent_id_field="post_id",
+        parent_ids=[p.id for p in posts],
+        user_id=user["id"],
+    ) if user else {}
 
-    # Compute preview comments
-    preview_comments = {}
-    for post in posts:
-        if post.comments:
-            preview_comments[post.id] = max(
-                post.comments, key=lambda c: (c.net_votes, -c.created_at.timestamp())
-            )
+    preview_comments = build_preview_comments(posts)
 
     # Return just the card fragments
     html_parts = []
@@ -230,29 +206,14 @@ async def vote_post(
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    if vote_type not in ("upvote", "downvote"):
-        raise HTTPException(status_code=400, detail="Invalid vote type")
-
-    existing = db.query(DiscussionVote).filter(
-        DiscussionVote.post_id == post_id,
-        DiscussionVote.user_id == user["id"],
-    ).first()
-
-    toggled_off = False
-    if existing:
-        if existing.vote_type == vote_type:
-            db.delete(existing)
-            toggled_off = True
-        else:
-            existing.vote_type = vote_type
-    else:
-        vote = DiscussionVote(
-            post_id=post_id,
-            user_id=user["id"],
-            vote_type=vote_type,
-            created_at=datetime.utcnow(),
-        )
-        db.add(vote)
+    toggled_off = toggle_vote(
+        db=db,
+        vote_model=DiscussionVote,
+        parent_id_field="post_id",
+        parent_id_value=post_id,
+        user_id=user["id"],
+        vote_type=vote_type,
+    )
 
     db.commit()
     db.refresh(post)
@@ -337,15 +298,12 @@ async def get_comments(
         raise HTTPException(status_code=404, detail="Post not found")
 
     # Get user votes on comments
-    comment_votes = {}
-    if user:
-        cids = [c.id for c in post.comments]
-        if cids:
-            cv = db.query(DiscussionCommentVote).filter(
-                DiscussionCommentVote.comment_id.in_(cids),
-                DiscussionCommentVote.user_id == user["id"],
-            ).all()
-            comment_votes = {v.comment_id: v.vote_type for v in cv}
+    comment_votes = load_user_votes(
+        db=db, vote_model=DiscussionCommentVote,
+        parent_id_field="comment_id",
+        parent_ids=[c.id for c in post.comments],
+        user_id=user["id"],
+    ) if user else {}
 
     return templates.TemplateResponse(
         "components/discussion_comments_list.html",
@@ -365,26 +323,14 @@ async def vote_discussion_comment(
     comment = db.query(DiscussionComment).filter(DiscussionComment.id == comment_id).first()
     if not comment:
         raise HTTPException(status_code=404)
-    if vote_type not in ("upvote", "downvote"):
-        raise HTTPException(status_code=400)
-
-    existing = db.query(DiscussionCommentVote).filter(
-        DiscussionCommentVote.comment_id == comment_id,
-        DiscussionCommentVote.user_id == user["id"],
-    ).first()
-
-    toggled_off = False
-    if existing:
-        if existing.vote_type == vote_type:
-            db.delete(existing)
-            toggled_off = True
-        else:
-            existing.vote_type = vote_type
-    else:
-        db.add(DiscussionCommentVote(
-            comment_id=comment_id, user_id=user["id"],
-            vote_type=vote_type, created_at=datetime.utcnow(),
-        ))
+    toggled_off = toggle_vote(
+        db=db,
+        vote_model=DiscussionCommentVote,
+        parent_id_field="comment_id",
+        parent_id_value=comment_id,
+        user_id=user["id"],
+        vote_type=vote_type,
+    )
 
     db.commit()
     db.refresh(comment)
@@ -418,14 +364,12 @@ async def delete_post(
 ):
     """Delete a discussion post (author only)."""
     user = require_auth(request)
-    post = db.query(DiscussionPost).filter(DiscussionPost.id == post_id).first()
-    if not post:
-        raise HTTPException(status_code=404)
-    if post.user_id != user["id"]:
-        raise HTTPException(status_code=403, detail="Only the author can delete this post")
-    db.delete(post)
-    db.commit()
-    return JSONResponse({"success": True})
+    return delete_owned_entity(
+        db=db, model=DiscussionPost, entity_id=post_id,
+        user_id=user["id"],
+        not_found_detail="Post not found",
+        forbidden_detail="Only the author can delete this post",
+    )
 
 
 @router.post("/discussion/comment/{comment_id}/delete")
@@ -436,14 +380,12 @@ async def delete_discussion_comment(
 ):
     """Delete a discussion comment (author only)."""
     user = require_auth(request)
-    comment = db.query(DiscussionComment).filter(DiscussionComment.id == comment_id).first()
-    if not comment:
-        raise HTTPException(status_code=404)
-    if comment.user_id != user["id"]:
-        raise HTTPException(status_code=403, detail="Only the author can delete this comment")
-    db.delete(comment)
-    db.commit()
-    return JSONResponse({"success": True})
+    return delete_owned_entity(
+        db=db, model=DiscussionComment, entity_id=comment_id,
+        user_id=user["id"],
+        not_found_detail="Comment not found",
+        forbidden_detail="Only the author can delete this comment",
+    )
 
 
 @router.post("/user/{user_id}/follow")

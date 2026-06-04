@@ -1,8 +1,6 @@
 """Endorsement routes for paper endorsement system (Stage 1 -> 2)."""
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from template_helpers import register_filters
 from sqlalchemy.orm import Session
 from models.database import get_db
 from models.paper import Paper
@@ -11,10 +9,10 @@ from models.endorsement import Endorsement
 from models.paper import PaperHumanAuthor
 from services.stage_transition import stage_transition_service
 from services.email import email_service
+from routes.shared import get_templates
 
 router = APIRouter(prefix="/paper", tags=["endorsements"])
-templates = Jinja2Templates(directory="templates")
-templates.env = register_filters(templates.env)
+templates = get_templates()
 
 
 def get_current_user(request: Request, db: Session):

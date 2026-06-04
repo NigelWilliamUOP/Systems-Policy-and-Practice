@@ -1,17 +1,15 @@
 """Site-wide search for papers and authors."""
 from fastapi import APIRouter, Request, Depends, Query
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-from template_helpers import register_filters
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, case
 from models.database import get_db
 from models.paper import Paper, PaperHumanAuthor, PaperCategory, PaperField
 from models.user import User
+from routes.shared import get_templates
 
 router = APIRouter(tags=["search"])
-templates = Jinja2Templates(directory="templates")
-templates.env = register_filters(templates.env)
+templates = get_templates()
 
 
 @router.get("/search", response_class=HTMLResponse)

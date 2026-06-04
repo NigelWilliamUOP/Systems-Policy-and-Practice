@@ -2,8 +2,6 @@
 import calendar
 from fastapi import APIRouter, Request, Depends, Query
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-from template_helpers import register_filters
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
 from models.database import get_db
@@ -11,10 +9,10 @@ from models.paper import Paper
 from models.stage_history import StageHistory
 from datetime import datetime
 from collections import defaultdict
+from routes.shared import get_templates
 
 router = APIRouter(prefix="/issues", tags=["issues"])
-templates = Jinja2Templates(directory="templates")
-templates.env = register_filters(templates.env)
+templates = get_templates()
 
 @router.get("", response_class=HTMLResponse)
 async def browse_years(request: Request, db: Session = Depends(get_db)):

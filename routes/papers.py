@@ -1,17 +1,15 @@
 """Paper viewing and file serving routes."""
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.templating import Jinja2Templates
-from template_helpers import register_filters
 from sqlalchemy.orm import Session
 from models.database import get_db
 from models.paper import Paper, PaperVersion
 from services.file_storage import file_storage
 from pathlib import Path
+from routes.shared import get_templates, get_paper_and_version
 
 router = APIRouter(prefix="/paper", tags=["papers"])
-templates = Jinja2Templates(directory="templates")
-templates.env = register_filters(templates.env)
+templates = get_templates()
 
 @router.get("/{paper_id}/pdf")
 async def serve_pdf(
@@ -20,25 +18,7 @@ async def serve_pdf(
     db: Session = Depends(get_db)
 ):
     """Serve PDF file for a paper."""
-    # Get paper
-    paper = db.query(Paper).filter(Paper.id == paper_id).first()
-    if not paper:
-        raise HTTPException(status_code=404, detail="Paper not found")
-
-    # Get requested version or current version
-    if version:
-        paper_version = db.query(PaperVersion).filter(
-            PaperVersion.paper_id == paper_id,
-            PaperVersion.version_number == version
-        ).first()
-    else:
-        paper_version = db.query(PaperVersion).filter(
-            PaperVersion.paper_id == paper_id,
-            PaperVersion.version_number == paper.current_version
-        ).first()
-
-    if not paper_version:
-        raise HTTPException(status_code=404, detail="Paper version not found")
+    paper, paper_version, _ = get_paper_and_version(paper_id, version, db)
 
     # Get file path
     file_path = file_storage.get_file_path(
@@ -70,27 +50,7 @@ async def serve_html(
     db: Session = Depends(get_db)
 ):
     """Serve HTML version of a paper with navigation."""
-    # Get paper
-    paper = db.query(Paper).filter(Paper.id == paper_id).first()
-    if not paper:
-        raise HTTPException(status_code=404, detail="Paper not found")
-
-    # Get requested version or current version
-    if version:
-        paper_version = db.query(PaperVersion).filter(
-            PaperVersion.paper_id == paper_id,
-            PaperVersion.version_number == version
-        ).first()
-        current_version = version
-    else:
-        paper_version = db.query(PaperVersion).filter(
-            PaperVersion.paper_id == paper_id,
-            PaperVersion.version_number == paper.current_version
-        ).first()
-        current_version = paper.current_version
-
-    if not paper_version:
-        raise HTTPException(status_code=404, detail="Paper version not found")
+    paper, paper_version, current_version = get_paper_and_version(paper_id, version, db)
 
     # Construct HTML filename from PDF filename
     html_filename = paper_version.pdf_filename.replace('.pdf', '.html')
@@ -175,25 +135,7 @@ async def serve_markdown(
     db: Session = Depends(get_db)
 ):
     """Serve Markdown version of a paper."""
-    # Get paper
-    paper = db.query(Paper).filter(Paper.id == paper_id).first()
-    if not paper:
-        raise HTTPException(status_code=404, detail="Paper not found")
-
-    # Get requested version or current version
-    if version:
-        paper_version = db.query(PaperVersion).filter(
-            PaperVersion.paper_id == paper_id,
-            PaperVersion.version_number == version
-        ).first()
-    else:
-        paper_version = db.query(PaperVersion).filter(
-            PaperVersion.paper_id == paper_id,
-            PaperVersion.version_number == paper.current_version
-        ).first()
-
-    if not paper_version:
-        raise HTTPException(status_code=404, detail="Paper version not found")
+    paper, paper_version, _ = get_paper_and_version(paper_id, version, db)
 
     # Construct Markdown filename from PDF filename
     md_filename = paper_version.pdf_filename.replace('.pdf', '.md')

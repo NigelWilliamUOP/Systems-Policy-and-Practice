@@ -1,8 +1,6 @@
 """Human peer review routes for Stage 3 -> 4 transition."""
 from fastapi import APIRouter, Request, Depends, HTTPException, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
-from template_helpers import register_filters
 from sqlalchemy.orm import Session
 from datetime import datetime
 from models.database import get_db
@@ -10,10 +8,10 @@ from models.paper import Paper
 from models.review import HumanReview
 from models.user import User
 from services.email import email_service
+from routes.shared import get_templates
 
 router = APIRouter(tags=["human_review"])
-templates = Jinja2Templates(directory="templates")
-templates.env = register_filters(templates.env)
+templates = get_templates()
 
 
 @router.get("/review/{token}", response_class=HTMLResponse)

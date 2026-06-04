@@ -6,15 +6,9 @@ from sqlalchemy.orm import Session
 from models.database import get_db
 from models.paper import Paper, PaperHumanAuthor
 from services.file_storage import file_storage
+from routes.shared import require_auth
 
 router = APIRouter(prefix="/paper", tags=["delete"])
-
-def require_auth(request: Request):
-    """Dependency to require authentication."""
-    user = request.session.get("user")
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    return user
 
 @router.post("/{paper_id}/delete")
 async def delete_paper(
