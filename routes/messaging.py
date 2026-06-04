@@ -1,8 +1,6 @@
 """Direct messaging routes."""
 from fastapi import APIRouter, Request, Depends, HTTPException, Form
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from template_helpers import register_filters
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_, case
 from models.database import get_db
@@ -11,17 +9,10 @@ from models.message import DirectMessage
 from models.discussion import UserFollow
 from services.notification import create_notification
 from datetime import datetime
+from routes.shared import require_auth, get_templates
 
 router = APIRouter(tags=["messaging"])
-templates = Jinja2Templates(directory="templates")
-templates.env = register_filters(templates.env)
-
-
-def require_auth(request: Request):
-    user = request.session.get("user")
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    return user
+templates = get_templates()
 
 
 def can_message(sender_id: int, recipient_id: int, db: Session) -> bool:

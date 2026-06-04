@@ -1,22 +1,13 @@
 """Notification routes."""
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from template_helpers import register_filters
 from sqlalchemy.orm import Session
 from models.database import get_db
 from services.notification import get_notifications, mark_all_as_read, mark_as_read
+from routes.shared import require_auth, get_templates
 
 router = APIRouter(tags=["notifications"])
-templates = Jinja2Templates(directory="templates")
-templates.env = register_filters(templates.env)
-
-
-def require_auth(request: Request):
-    user = request.session.get("user")
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    return user
+templates = get_templates()
 
 
 @router.get("/notifications", response_class=HTMLResponse)

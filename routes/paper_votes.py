@@ -5,17 +5,9 @@ from sqlalchemy.orm import Session
 from models.database import get_db
 from models.paper import Paper
 from models.paper_vote import PaperVote
-from datetime import datetime
+from routes.shared import require_auth, toggle_vote
 
 router = APIRouter(tags=["paper_votes"])
-
-
-def require_auth(request: Request):
-    """Dependency to require authentication."""
-    user = request.session.get("user")
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    return user
 
 
 @router.post("/paper/{paper_id}/vote")
@@ -33,32 +25,14 @@ async def vote_paper(
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
 
-    # Validate vote type
-    if vote_type not in ["upvote", "downvote"]:
-        raise HTTPException(status_code=400, detail="Invalid vote type")
-
-    # Check if user already voted
-    existing_vote = db.query(PaperVote).filter(
-        PaperVote.paper_id == paper_id,
-        PaperVote.user_id == user_data["id"]
-    ).first()
-
-    if existing_vote:
-        if existing_vote.vote_type == vote_type:
-            # Remove vote if clicking same type (toggle off)
-            db.delete(existing_vote)
-        else:
-            # Change vote type
-            existing_vote.vote_type = vote_type
-    else:
-        # Create new vote
-        vote = PaperVote(
-            paper_id=paper_id,
-            user_id=user_data["id"],
-            vote_type=vote_type,
-            created_at=datetime.utcnow()
-        )
-        db.add(vote)
+    toggle_vote(
+        db=db,
+        vote_model=PaperVote,
+        parent_id_field="paper_id",
+        parent_id_value=paper_id,
+        user_id=user_data["id"],
+        vote_type=vote_type,
+    )
 
     db.commit()
     db.refresh(paper)

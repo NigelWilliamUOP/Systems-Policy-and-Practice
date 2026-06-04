@@ -1,8 +1,6 @@
 """Authentication routes for ORCID OAuth."""
 from fastapi import APIRouter, Request, Depends, HTTPException, Form
 from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from template_helpers import register_filters
 from sqlalchemy.orm import Session
 from models.database import get_db
 from models.user import User
@@ -12,10 +10,10 @@ from models.user_email import UserEmail
 import config
 import json
 from datetime import datetime
+from routes.shared import get_templates
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-templates = Jinja2Templates(directory="templates")
-templates.env = register_filters(templates.env)
+templates = get_templates()
 
 @router.get("/login")
 async def login(request: Request):

@@ -1,25 +1,16 @@
 """Comment and voting routes."""
 from fastapi import APIRouter, Request, Depends, HTTPException, Form
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from template_helpers import register_filters
 from sqlalchemy.orm import Session
 from sqlalchemy import distinct
 from models.database import get_db
 from models.comment import Comment, CommentVote
 from models.paper import Paper
 from datetime import datetime
+from routes.shared import require_auth, get_templates, toggle_vote
 
 router = APIRouter(tags=["comments"])
-templates = Jinja2Templates(directory="templates")
-templates.env = register_filters(templates.env)
-
-def require_auth(request: Request):
-    """Dependency to require authentication."""
-    user = request.session.get("user")
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    return user
+templates = get_templates()
 
 @router.post("/paper/{paper_id}/comment", response_class=HTMLResponse)
 async def add_comment(
@@ -117,32 +108,14 @@ async def vote_comment(
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
 
-    # Validate vote type
-    if vote_type not in ["upvote", "downvote"]:
-        raise HTTPException(status_code=400, detail="Invalid vote type")
-
-    # Check if user already voted
-    existing_vote = db.query(CommentVote).filter(
-        CommentVote.comment_id == comment_id,
-        CommentVote.user_id == user_data["id"]
-    ).first()
-
-    if existing_vote:
-        if existing_vote.vote_type == vote_type:
-            # Remove vote if clicking same type
-            db.delete(existing_vote)
-        else:
-            # Change vote type
-            existing_vote.vote_type = vote_type
-    else:
-        # Create new vote
-        vote = CommentVote(
-            comment_id=comment_id,
-            user_id=user_data["id"],
-            vote_type=vote_type,
-            created_at=datetime.utcnow()
-        )
-        db.add(vote)
+    toggle_vote(
+        db=db,
+        vote_model=CommentVote,
+        parent_id_field="comment_id",
+        parent_id_value=comment_id,
+        user_id=user_data["id"],
+        vote_type=vote_type,
+    )
 
     db.commit()
     db.refresh(comment)

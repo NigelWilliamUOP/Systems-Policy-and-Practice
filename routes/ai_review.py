@@ -7,8 +7,6 @@ Auto-advances to stage 4 when all revision scores >= 3. Desk rejects after 3 fai
 """
 from fastapi import APIRouter, Request, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, Response
-from fastapi.templating import Jinja2Templates
-from template_helpers import register_filters
 from sqlalchemy.orm import Session
 from datetime import datetime
 from html import escape as html_escape
@@ -21,10 +19,10 @@ from services.reviewer3 import reviewer3_service
 from services.stage_transition import stage_transition_service
 from services.file_storage import file_storage
 from services.user_email import add_email_if_new
+from routes.shared import get_templates
 
 router = APIRouter(prefix="/paper", tags=["ai_review"])
-templates = Jinja2Templates(directory="templates")
-templates.env = register_filters(templates.env)
+templates = get_templates()
 
 
 def _is_paper_author(paper_id: int, user_id: int, db: Session) -> bool:

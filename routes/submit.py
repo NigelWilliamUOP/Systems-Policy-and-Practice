@@ -1,8 +1,6 @@
 """Paper submission routes."""
 from fastapi import APIRouter, BackgroundTasks, Request, Depends, HTTPException, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from template_helpers import register_filters
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from models.database import get_db
@@ -20,17 +18,10 @@ from typing import List, Optional
 import json
 import secrets
 import config
+from routes.shared import require_auth, get_templates
 
 router = APIRouter(prefix="/submit", tags=["submit"])
-templates = Jinja2Templates(directory="templates")
-templates.env = register_filters(templates.env)
-
-def require_auth(request: Request):
-    """Dependency to require authentication."""
-    user = request.session.get("user")
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    return user
+templates = get_templates()
 
 @router.get("", response_class=HTMLResponse)
 async def submit_form(request: Request):

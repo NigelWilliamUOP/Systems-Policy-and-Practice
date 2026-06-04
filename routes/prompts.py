@@ -4,8 +4,6 @@ import os
 import glob
 from fastapi import APIRouter, Request, Depends, HTTPException, Form, Query
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
-from template_helpers import register_filters
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from models.database import get_db
@@ -13,10 +11,13 @@ from models.prompt import CommunityPrompt, PromptComment, PromptCommentVote, Pro
 from models.user import User
 from datetime import datetime
 from services.notification import create_notification
+from routes.shared import (
+    require_auth, get_templates, toggle_vote, delete_owned_entity,
+    get_user_following, build_preview_comments, load_user_votes,
+)
 
 router = APIRouter(tags=["prompts"])
-templates = Jinja2Templates(directory="templates")
-templates.env = register_filters(templates.env)
+templates = get_templates()
 
 CONVERSATIONS_SRC = "/root/.claude/projects/-var-www-ai-journal"
 CONVERSATIONS_DIR = "/var/www/ai_journal/data/conversations"
@@ -107,14 +108,6 @@ def _get_prompt_at_index(index=None):
     }
 
 
-def require_auth(request: Request):
-    """Require ORCID authentication."""
-    user = request.session.get("user")
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    return user
-
-
 @router.post("/prompts/summarize/archive", response_class=HTMLResponse)
 async def summarize_archive(
     request: Request,
@@ -190,27 +183,16 @@ async def prompts_feed(
 
     prompts = query.order_by(CommunityPrompt.created_at.desc()).limit(20).all()
 
-    user_votes = {}
-    if user:
-        pids = [p.id for p in prompts]
-        if pids:
-            votes = db.query(PromptVote).filter(
-                PromptVote.prompt_id.in_(pids),
-                PromptVote.user_id == user["id"],
-            ).all()
-            user_votes = {v.prompt_id: v.vote_type for v in votes}
+    user_votes = load_user_votes(
+        db=db, vote_model=PromptVote,
+        parent_id_field="prompt_id",
+        parent_ids=[p.id for p in prompts],
+        user_id=user["id"],
+    ) if user else {}
 
-    preview_comments = {
-        p.id: max(p.comments, key=lambda c: (c.net_votes, -c.created_at.timestamp()))
-        for p in prompts if p.comments
-    }
+    preview_comments = build_preview_comments(prompts)
 
-    # Follow data for feed fragments
-    user_following = set()
-    if user:
-        from models.discussion import UserFollow
-        follows = db.query(UserFollow.followed_id).filter(UserFollow.follower_id == user["id"]).all()
-        user_following = {f[0] for f in follows}
+    user_following = get_user_following(user, db)
 
     html_parts = []
     for prompt in prompts:
@@ -247,7 +229,6 @@ async def prompt_detail(
     user = request.session.get("user")
     user_vote = None
     comment_votes = {}
-    user_following = set()
 
     if user:
         vote = db.query(PromptVote).filter(
@@ -256,19 +237,14 @@ async def prompt_detail(
         ).first()
         user_vote = vote.vote_type if vote else None
 
-        # Comment votes for the current user
-        cids = [c.id for c in prompt.comments]
-        if cids:
-            cv = db.query(PromptCommentVote).filter(
-                PromptCommentVote.comment_id.in_(cids),
-                PromptCommentVote.user_id == user["id"],
-            ).all()
-            comment_votes = {v.comment_id: v.vote_type for v in cv}
+        comment_votes = load_user_votes(
+            db=db, vote_model=PromptCommentVote,
+            parent_id_field="comment_id",
+            parent_ids=[c.id for c in prompt.comments],
+            user_id=user["id"],
+        )
 
-        # Follow data
-        from models.discussion import UserFollow
-        follows = db.query(UserFollow.followed_id).filter(UserFollow.follower_id == user["id"]).all()
-        user_following = {f[0] for f in follows}
+    user_following = get_user_following(user, db)
 
     related_posts = []
 
@@ -366,22 +342,15 @@ async def prompts_page(
     has_more_prompts = len(community_prompts) == 20
 
     # Get user's follow list (for follow buttons on cards)
-    user_following = set()
-    if user:
-        from models.discussion import UserFollow
-        follows = db.query(UserFollow.followed_id).filter(UserFollow.follower_id == user["id"]).all()
-        user_following = {f[0] for f in follows}
+    user_following = get_user_following(user, db)
 
     # Get user's votes on visible prompts
-    user_votes = {}
-    if user:
-        prompt_ids = [p.id for p in community_prompts]
-        if prompt_ids:
-            votes = db.query(PromptVote).filter(
-                PromptVote.prompt_id.in_(prompt_ids),
-                PromptVote.user_id == user["id"],
-            ).all()
-            user_votes = {v.prompt_id: v.vote_type for v in votes}
+    user_votes = load_user_votes(
+        db=db, vote_model=PromptVote,
+        parent_id_field="prompt_id",
+        parent_ids=[p.id for p in community_prompts],
+        user_id=user["id"],
+    ) if user else {}
 
     # Pre-compute archive summary (last 100 prompts).
     # Refreshes every 20 new prompts: stores the total count at summary time
@@ -483,10 +452,7 @@ async def prompts_page(
             "filter_type": filter_type,
             "prompt_type_filter": prompt_type_filter,
             "search_query": search_query,
-            "preview_comments": {
-                p.id: max(p.comments, key=lambda c: (c.net_votes, -c.created_at.timestamp()))
-                for p in community_prompts if p.comments
-            },
+            "preview_comments": build_preview_comments(community_prompts),
             "user_following": user_following,
         },
     )
@@ -558,29 +524,14 @@ async def vote_prompt(
     if not prompt:
         raise HTTPException(status_code=404, detail="Prompt not found")
 
-    if vote_type not in ("upvote", "downvote"):
-        raise HTTPException(status_code=400, detail="Invalid vote type")
-
-    existing = db.query(PromptVote).filter(
-        PromptVote.prompt_id == prompt_id,
-        PromptVote.user_id == user["id"],
-    ).first()
-
-    toggled_off = False
-    if existing:
-        if existing.vote_type == vote_type:
-            db.delete(existing)  # Toggle off
-            toggled_off = True
-        else:
-            existing.vote_type = vote_type  # Switch vote
-    else:
-        vote = PromptVote(
-            prompt_id=prompt_id,
-            user_id=user["id"],
-            vote_type=vote_type,
-            created_at=datetime.utcnow(),
-        )
-        db.add(vote)
+    toggled_off = toggle_vote(
+        db=db,
+        vote_model=PromptVote,
+        parent_id_field="prompt_id",
+        parent_id_value=prompt_id,
+        user_id=user["id"],
+        vote_type=vote_type,
+    )
 
     db.commit()
     db.refresh(prompt)
@@ -663,15 +614,12 @@ async def get_prompt_comments(
     if not prompt:
         raise HTTPException(status_code=404, detail="Prompt not found")
 
-    comment_votes = {}
-    if user:
-        cids = [c.id for c in prompt.comments]
-        if cids:
-            cv = db.query(PromptCommentVote).filter(
-                PromptCommentVote.comment_id.in_(cids),
-                PromptCommentVote.user_id == user["id"],
-            ).all()
-            comment_votes = {v.comment_id: v.vote_type for v in cv}
+    comment_votes = load_user_votes(
+        db=db, vote_model=PromptCommentVote,
+        parent_id_field="comment_id",
+        parent_ids=[c.id for c in prompt.comments],
+        user_id=user["id"],
+    ) if user else {}
 
     return templates.TemplateResponse(
         "components/prompt_comments_list.html",
@@ -691,26 +639,14 @@ async def vote_prompt_comment(
     comment = db.query(PromptComment).filter(PromptComment.id == comment_id).first()
     if not comment:
         raise HTTPException(status_code=404)
-    if vote_type not in ("upvote", "downvote"):
-        raise HTTPException(status_code=400)
-
-    existing = db.query(PromptCommentVote).filter(
-        PromptCommentVote.comment_id == comment_id,
-        PromptCommentVote.user_id == user["id"],
-    ).first()
-
-    toggled_off = False
-    if existing:
-        if existing.vote_type == vote_type:
-            db.delete(existing)
-            toggled_off = True
-        else:
-            existing.vote_type = vote_type
-    else:
-        db.add(PromptCommentVote(
-            comment_id=comment_id, user_id=user["id"],
-            vote_type=vote_type, created_at=datetime.utcnow(),
-        ))
+    toggled_off = toggle_vote(
+        db=db,
+        vote_model=PromptCommentVote,
+        parent_id_field="comment_id",
+        parent_id_value=comment_id,
+        user_id=user["id"],
+        vote_type=vote_type,
+    )
 
     db.commit()
     db.refresh(comment)
@@ -798,14 +734,12 @@ async def delete_prompt(
 ):
     """Delete a community prompt (author only)."""
     user = require_auth(request)
-    prompt = db.query(CommunityPrompt).filter(CommunityPrompt.id == prompt_id).first()
-    if not prompt:
-        raise HTTPException(status_code=404)
-    if prompt.user_id != user["id"]:
-        raise HTTPException(status_code=403, detail="Only the author can delete this prompt")
-    db.delete(prompt)
-    db.commit()
-    return JSONResponse({"success": True})
+    return delete_owned_entity(
+        db=db, model=CommunityPrompt, entity_id=prompt_id,
+        user_id=user["id"],
+        not_found_detail="Prompt not found",
+        forbidden_detail="Only the author can delete this prompt",
+    )
 
 
 @router.post("/prompts/comment/{comment_id}/delete")
@@ -816,14 +750,12 @@ async def delete_prompt_comment(
 ):
     """Delete a prompt comment (author only)."""
     user = require_auth(request)
-    comment = db.query(PromptComment).filter(PromptComment.id == comment_id).first()
-    if not comment:
-        raise HTTPException(status_code=404)
-    if comment.user_id != user["id"]:
-        raise HTTPException(status_code=403, detail="Only the author can delete this comment")
-    db.delete(comment)
-    db.commit()
-    return JSONResponse({"success": True})
+    return delete_owned_entity(
+        db=db, model=PromptComment, entity_id=comment_id,
+        user_id=user["id"],
+        not_found_detail="Comment not found",
+        forbidden_detail="Only the author can delete this comment",
+    )
 
 
 @router.post("/user/{user_id}/follow")

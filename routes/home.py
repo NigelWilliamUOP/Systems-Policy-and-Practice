@@ -1,8 +1,6 @@
 """Homepage and about page routes."""
 from fastapi import APIRouter, Request, Depends, Query
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-from template_helpers import register_filters
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 from models.database import get_db
@@ -13,10 +11,10 @@ from services.cache import cache, cache_result
 import random
 import json
 from datetime import date
+from routes.shared import get_templates
 
 router = APIRouter()
-templates = Jinja2Templates(directory="templates")
-templates.env = register_filters(templates.env)
+templates = get_templates()
 
 # Tabs represent the LAST CLEARED milestone, not the next stage.
 # Tab 0: Screened Out (review_stage=0, status=ai_screen_rejected)

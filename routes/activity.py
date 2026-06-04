@@ -1,17 +1,15 @@
 """Activity profile routes — user's posts and comments."""
 from fastapi import APIRouter, Request, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-from template_helpers import register_filters
 from sqlalchemy.orm import Session
 from models.database import get_db
 from models.user import User
 from models.prompt import CommunityPrompt, PromptComment
 from models.discussion import UserFollow
+from routes.shared import get_templates
 
 router = APIRouter(tags=["activity"])
-templates = Jinja2Templates(directory="templates")
-templates.env = register_filters(templates.env)
+templates = get_templates()
 
 
 @router.get("/activity/{user_id}", response_class=HTMLResponse)
