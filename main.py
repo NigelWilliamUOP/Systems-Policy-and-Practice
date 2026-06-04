@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
-from starlette.middleware.cors import CORSMiddleware
+
 import config
 from models.database import init_db
 from middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware

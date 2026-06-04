@@ -183,13 +183,16 @@ def migrate_data():
 
         # Update sequences
         print("\n🔢 Updating PostgreSQL sequences...")
-        tables = ['users', 'papers', 'paper_versions', 'paper_human_authors',
-                  'paper_ai_authors', 'paper_fields', 'comments', 'comment_votes']
-
-        for table in tables:
+        # Single allowlist of tables — used both for iteration and injection prevention
+        allowed_tables = (
+            'users', 'papers', 'paper_versions', 'paper_human_authors',
+            'paper_ai_authors', 'paper_fields', 'comments', 'comment_votes',
+        )
+        for table in allowed_tables:
             try:
                 result = postgres_session.execute(
-                    text(f"SELECT setval('{table}_id_seq', (SELECT MAX(id) FROM {table}));")
+                    text("SELECT setval(:seq_name, COALESCE(MAX(id), 1), MAX(id) IS NOT NULL) FROM " + table + ";"),
+                    {"seq_name": f"{table}_id_seq"},
                 )
                 postgres_session.commit()
                 print(f"✅ Updated {table} sequence")
