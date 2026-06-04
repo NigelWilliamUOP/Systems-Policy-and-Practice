@@ -1,5 +1,6 @@
 """Open Prompt routes — archive of building prompts and community suggestions."""
 import json
+import logging
 import os
 import glob
 from fastapi import APIRouter, Request, Depends, HTTPException, Form, Query
@@ -131,7 +132,7 @@ async def summarize_archive(
     try:
         summary = await summarize_archive_prompts(combined, count)
     except Exception as e:
-        print(f"[prompts] Archive summarization failed: {e}")
+        logging.exception("[prompts] Archive summarization failed")
         return HTMLResponse('<p class="text-sm text-red-500">Summarization is temporarily unavailable. Please try again later.</p>')
     return templates.TemplateResponse(
         "components/summary_card.html",
@@ -166,7 +167,7 @@ async def summarize_community(
     try:
         summary = await summarize_community_prompts(combined, count)
     except Exception as e:
-        print(f"[prompts] Community summarization failed: {e}")
+        logging.exception("[prompts] Community summarization failed")
         return HTMLResponse('<p class="text-sm text-red-500">Summarization is temporarily unavailable. Please try again later.</p>')
     return templates.TemplateResponse(
         "components/summary_card.html",
