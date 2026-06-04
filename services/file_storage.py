@@ -1,4 +1,5 @@
 """Date-based file storage service."""
+import logging
 from pathlib import Path
 from datetime import datetime
 import aiofiles
@@ -6,6 +7,8 @@ import secrets
 import config
 from typing import Tuple, Optional
 from services.pdf_converter import pdf_converter
+
+logger = logging.getLogger(__name__)
 
 class FileStorageService:
     """Service for managing date-based file storage."""
@@ -75,7 +78,7 @@ class FileStorageService:
                     paper_abstract
                 )
             except Exception as e:
-                print(f"Warning: Could not generate HTML/Markdown versions: {e}")
+                logger.warning("Could not generate HTML/Markdown versions", exc_info=True)
 
         return filename, file_path
 
@@ -107,7 +110,7 @@ class FileStorageService:
             thumbnail_path = image_processor.generate_thumbnail(file_path)
             print(f"✓ Generated thumbnail: {thumbnail_path.name}")
         except Exception as e:
-            print(f"Warning: Failed to generate thumbnail for {filename}: {e}")
+            logger.warning("Failed to generate thumbnail for %s", filename, exc_info=True)
             # Don't fail the upload if thumbnail generation fails
 
         return filename, file_path
@@ -144,7 +147,7 @@ class FileStorageService:
             async with aiofiles.open(file_path, 'rb') as f:
                 return await f.read()
         except Exception as e:
-            print(f"Error reading file {file_path}: {e}")
+            logger.warning("Error reading file %s", file_path, exc_info=True)
             return None
 
     def delete_file(self, file_path: Path) -> bool:
@@ -155,7 +158,7 @@ class FileStorageService:
                 return True
             return False
         except Exception as e:
-            print(f"Error deleting file {file_path}: {e}")
+            logger.warning("Error deleting file %s", file_path, exc_info=True)
             return False
 
     def get_file_size(self, file_path: Path) -> int:
@@ -165,6 +168,7 @@ class FileStorageService:
                 return file_path.stat().st_size
             return 0
         except Exception:
+            logger.warning("Failed to get file size for %s", file_path, exc_info=True)
             return 0
 
 # Create singleton instance

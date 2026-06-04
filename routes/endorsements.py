@@ -1,4 +1,5 @@
 """Endorsement routes for paper endorsement system (Stage 1 -> 2)."""
+import logging
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
@@ -8,6 +9,8 @@ from models.database import get_db
 from models.paper import Paper
 from models.user import User
 from models.endorsement import Endorsement
+
+logger = logging.getLogger(__name__)
 from models.paper import PaperHumanAuthor
 from services.stage_transition import stage_transition_service
 from services.email import email_service
@@ -162,7 +165,7 @@ async def withdraw_endorsement(
         db.commit()
     except Exception as e:
         db.rollback()
-        print(f"ERROR: Failed to withdraw endorsement {endorsement.id}: {e}")
+        logger.error("Failed to withdraw endorsement %d", endorsement.id, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to withdraw endorsement.")
 
     user = db.query(User).filter(User.id == session_user["id"]).first()

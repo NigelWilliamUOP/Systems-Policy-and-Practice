@@ -1,9 +1,12 @@
 """Redis caching service for JAIGP."""
+import logging
 import redis
 import json
 from functools import wraps
 from typing import Any, Optional
 import config
+
+logger = logging.getLogger(__name__)
 
 # Initialize Redis client
 redis_client = redis.Redis(
@@ -38,7 +41,7 @@ class CacheService:
                 return json.loads(value)
             return None
         except Exception as e:
-            print(f"Cache get error: {e}")
+            logger.warning("Cache get error for key %s", key, exc_info=True)
             return None
 
     @staticmethod
@@ -55,7 +58,7 @@ class CacheService:
             )
             return True
         except Exception as e:
-            print(f"Cache set error: {e}")
+            logger.warning("Cache set error for key %s", key, exc_info=True)
             return False
 
     @staticmethod
@@ -68,7 +71,7 @@ class CacheService:
             redis_client.delete(key)
             return True
         except Exception as e:
-            print(f"Cache delete error: {e}")
+            logger.warning("Cache delete error for key %s", key, exc_info=True)
             return False
 
     @staticmethod
@@ -83,7 +86,7 @@ class CacheService:
                 redis_client.delete(*keys)
             return True
         except Exception as e:
-            print(f"Cache clear error: {e}")
+            logger.warning("Cache clear error for pattern %s", pattern, exc_info=True)
             return False
 
     @staticmethod
@@ -95,7 +98,7 @@ class CacheService:
         try:
             return redis_client.incrby(key, amount)
         except Exception as e:
-            print(f"Cache increment error: {e}")
+            logger.warning("Cache increment error for key %s", key, exc_info=True)
             return None
 
     @staticmethod
@@ -108,7 +111,7 @@ class CacheService:
             redis_client.expire(key, seconds)
             return True
         except Exception as e:
-            print(f"Cache expiry error: {e}")
+            logger.warning("Cache expiry error for key %s", key, exc_info=True)
             return False
 
 
@@ -191,7 +194,7 @@ class RateLimiter:
             return (True, limit - current_int - 1)
 
         except Exception as e:
-            print(f"Rate limit error: {e}")
+            logger.warning("Rate limit check error for %s", identifier, exc_info=True)
             return (True, limit)  # Allow on error
 
     @staticmethod
@@ -205,7 +208,7 @@ class RateLimiter:
             redis_client.delete(key)
             return True
         except Exception as e:
-            print(f"Rate limit reset error: {e}")
+            logger.warning("Rate limit reset error for %s", identifier, exc_info=True)
             return False
 
 

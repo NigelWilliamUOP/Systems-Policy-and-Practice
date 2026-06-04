@@ -1,9 +1,12 @@
 """Database setup and session management."""
+import logging
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
 import config
+
+logger = logging.getLogger(__name__)
 
 # Create database engine with connection pooling for PostgreSQL
 if "postgresql" in config.DATABASE_URL:
@@ -80,6 +83,6 @@ def _migrate_existing_papers():
             print(f"  Migrated {len(papers)} existing papers to review_stage=1")
     except Exception as e:
         db.rollback()
-        print(f"  Migration note: {e}")
+        logger.warning("Migration of existing papers skipped or failed", exc_info=True)
     finally:
         db.close()

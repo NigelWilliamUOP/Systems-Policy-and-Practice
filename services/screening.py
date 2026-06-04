@@ -7,6 +7,7 @@ BORDERLINE → delete paper, send soft-rejection email.
 REJECT → delete paper, send hard-rejection email, apply 48 h cooldown.
 Low-confidence REJECT is treated as BORDERLINE.
 """
+import logging
 import re
 import asyncio
 import traceback
@@ -17,6 +18,8 @@ import config
 from models.submission_screening import SubmissionScreening
 from models.paper import Paper, PaperHumanAuthor
 from services.stage_transition import stage_transition_service
+
+logger = logging.getLogger(__name__)
 
 
 _SCREENING_PROMPT = """\
@@ -154,7 +157,7 @@ async def screen_paper_background(paper_id: int) -> None:
     try:
         await _screen_paper(paper_id, db)
     except Exception:
-        traceback.print_exc()
+        logger.error("Background screening failed for paper %d", paper_id, exc_info=True)
     finally:
         db.close()
 
@@ -190,7 +193,7 @@ async def _screen_paper(paper_id: int, db: Session) -> None:
             _call_claude_sync, title, abstract
         )
     except Exception as e:
-        print(f"[screening] Claude API error for paper {paper_id}: {e}")
+        logger.error("Claude API error during screening for paper %d", paper_id, exc_info=True)
         # On API failure default to PASS — don't block legitimate submissions
         outcome, confidence, concern = "pass", "low", None
 
@@ -256,7 +259,7 @@ async def _screen_paper(paper_id: int, db: Session) -> None:
             db.commit()  # commits both the screening record and the deletion
         except Exception as e:
             db.rollback()
-            print(f"ERROR: Failed to delete screened paper {paper_id}: {e}")
+            logger.error("Failed to delete screened paper %d", paper_id, exc_info=True)
             raise
 
         if outcome == "borderline":
@@ -300,7 +303,7 @@ async def screen_paper_retroactive(paper_id: int, db: Session) -> str:
             _call_claude_sync, paper.title, paper.abstract
         )
     except Exception as e:
-        print(f"[screening] Claude API error for paper {paper_id}: {e}")
+        logger.error("Claude API error during re-screening for paper %d", paper_id, exc_info=True)
         outcome, confidence, concern = "pass", "low", None
 
     if outcome == "reject" and confidence == "low":

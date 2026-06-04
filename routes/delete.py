@@ -1,4 +1,5 @@
 """Paper deletion routes."""
+import logging
 from datetime import datetime
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse
@@ -6,6 +7,8 @@ from sqlalchemy.orm import Session
 from models.database import get_db
 from models.paper import Paper, PaperHumanAuthor
 from services.file_storage import file_storage
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/paper", tags=["delete"])
 
@@ -55,13 +58,13 @@ async def delete_paper(
                 file_path = file_storage.get_file_path(version.pdf_filename, paper.published_date)
                 file_storage.delete_file(file_path)
             except Exception:
-                pass
+                logger.warning("Failed to delete PDF %s for paper %d", version.pdf_filename, paper_id, exc_info=True)
         if paper.image_filename:
             try:
                 image_path = file_storage.get_file_path(paper.image_filename, paper.published_date)
                 file_storage.delete_file(image_path)
             except Exception:
-                pass
+                logger.warning("Failed to delete image %s for paper %d", paper.image_filename, paper_id, exc_info=True)
             paper.image_filename = None
         db.commit()
         return RedirectResponse(url="/auth/profile", status_code=303)
@@ -75,21 +78,21 @@ async def delete_paper(
             file_path = file_storage.get_file_path(version.pdf_filename, paper.published_date)
             file_storage.delete_file(file_path)
         except Exception:
-            pass
+            logger.warning("Failed to delete PDF %s for paper %d", version.pdf_filename, paper_id, exc_info=True)
 
     if paper.image_filename:
         try:
             image_path = file_storage.get_file_path(paper.image_filename, paper.published_date)
             file_storage.delete_file(image_path)
         except Exception:
-            pass
+            logger.warning("Failed to delete image %s for paper %d", paper.image_filename, paper_id, exc_info=True)
 
     try:
         db.delete(paper)
         db.commit()
     except Exception as e:
         db.rollback()
-        print(f"ERROR: Failed to delete paper {paper_id}: {e}")
+        logger.error("Failed to delete paper %d", paper_id, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to delete paper. Please contact support.")
 
     return RedirectResponse(url="/auth/profile", status_code=303)
