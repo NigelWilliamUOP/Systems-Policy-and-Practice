@@ -131,7 +131,8 @@ async def summarize_archive(
     try:
         summary = await summarize_archive_prompts(combined, count)
     except Exception as e:
-        return HTMLResponse(f'<p class="text-sm text-red-500">Summarization failed: {e}</p>')
+        print(f"[prompts] Archive summarization failed: {e}")
+        return HTMLResponse('<p class="text-sm text-red-500">Summarization is temporarily unavailable. Please try again later.</p>')
     return templates.TemplateResponse(
         "components/summary_card.html",
         {"request": request, "summary": summary, "count": count, "label": "prompts"},
@@ -165,7 +166,8 @@ async def summarize_community(
     try:
         summary = await summarize_community_prompts(combined, count)
     except Exception as e:
-        return HTMLResponse(f'<p class="text-sm text-red-500">Summarization failed: {e}</p>')
+        print(f"[prompts] Community summarization failed: {e}")
+        return HTMLResponse('<p class="text-sm text-red-500">Summarization is temporarily unavailable. Please try again later.</p>')
     return templates.TemplateResponse(
         "components/summary_card.html",
         {"request": request, "summary": summary, "count": count, "label": "posts"},

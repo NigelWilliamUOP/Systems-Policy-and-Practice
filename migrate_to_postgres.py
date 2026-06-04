@@ -186,10 +186,19 @@ def migrate_data():
         tables = ['users', 'papers', 'paper_versions', 'paper_human_authors',
                   'paper_ai_authors', 'paper_fields', 'comments', 'comment_votes']
 
+        # Allowlist of known tables to prevent SQL injection
+        allowed_tables = {
+            'users', 'papers', 'paper_versions', 'paper_human_authors',
+            'paper_ai_authors', 'paper_fields', 'comments', 'comment_votes',
+        }
         for table in tables:
+            if table not in allowed_tables:
+                print(f"⚠️  Skipping unknown table: {table}")
+                continue
             try:
                 result = postgres_session.execute(
-                    text(f"SELECT setval('{table}_id_seq', (SELECT MAX(id) FROM {table}));")
+                    text("SELECT setval(:seq_name, (SELECT COALESCE(MAX(id), 1) FROM " + table + "));"),
+                    {"seq_name": f"{table}_id_seq"},
                 )
                 postgres_session.commit()
                 print(f"✅ Updated {table} sequence")

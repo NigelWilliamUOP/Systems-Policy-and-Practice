@@ -88,7 +88,7 @@ async def fetch_openalex_fields(
             {
                 "request": request,
                 "suggestions": [],
-                "error": f"Error: {str(e)}"
+                "error": "Could not fetch field suggestions. Please try again."
             }
         )
 

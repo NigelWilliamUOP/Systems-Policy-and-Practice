@@ -40,7 +40,8 @@ async def summarize_discussion_feed(
     try:
         summary = await summarize_discussion(combined, count)
     except Exception as e:
-        return HTMLResponse(f'<p class="text-sm text-red-500">Summarization failed: {e}</p>')
+        print(f"[discussion] Summarization failed: {e}")
+        return HTMLResponse('<p class="text-sm text-red-500">Summarization is temporarily unavailable. Please try again later.</p>')
     from fastapi.templating import Jinja2Templates
     tpl = Jinja2Templates(directory="templates")
     return tpl.TemplateResponse(

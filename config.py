@@ -1,5 +1,7 @@
 """Configuration settings for JAIGP application."""
 import os
+import secrets
+import warnings
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -12,7 +14,16 @@ BASE_DIR = Path(__file__).resolve().parent
 # Application settings
 APP_NAME = os.getenv("APP_NAME", "JAIGP - Journal for AI Generated Papers")
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
-SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
+_secret_key_env = os.getenv("SECRET_KEY", "")
+if not _secret_key_env or _secret_key_env == "change-me-in-production":
+    if not DEBUG:
+        warnings.warn(
+            "SECRET_KEY is not set or uses the insecure default. "
+            "Set a strong SECRET_KEY via environment variable in production.",
+            stacklevel=1,
+        )
+    _secret_key_env = secrets.token_hex(32)
+SECRET_KEY = _secret_key_env
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8002")
 
 # Database

@@ -708,9 +708,8 @@ async def delete_account_confirm(
 
     except Exception as e:
         db.rollback()
-        print(f"ERROR: Failed to delete user {uid}: {e}")
-        import traceback
-        traceback.print_exc()
+        import logging
+        logging.exception("Failed to delete user %s", uid)
         raise HTTPException(status_code=500, detail="Failed to delete account. Please contact support.")
 
     # Clear session
